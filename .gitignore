@@ -46,7 +46,6 @@ test_summary*.txt
 *.log
 
 # Compiled binaries
-main
-api
+
 
 .vscode/

@@ -15,6 +15,7 @@ import (
 	"github.com/mafzaidi/stackforge/internal/infrastructure/config"
 	"github.com/mafzaidi/stackforge/internal/infrastructure/logger"
 	"github.com/mafzaidi/stackforge/internal/infrastructure/persistence/memory"
+	"github.com/mafzaidi/stackforge/internal/pkg/response"
 	authUseCase "github.com/mafzaidi/stackforge/internal/usecase/auth"
 	todoUseCase "github.com/mafzaidi/stackforge/internal/usecase/todo"
 	"github.com/stretchr/testify/assert"
@@ -75,8 +76,8 @@ func TestAPIBackwardCompatibility_CallbackEndpoint(t *testing.T) {
 		err := json.Unmarshal(w.Body.Bytes(), &response)
 		require.NoError(t, err)
 
-		assert.Contains(t, response["message"], "Missing authentication token")
-		assert.NotEmpty(t, response["request_id"])
+		assert.Contains(t, response["error"], "Missing authentication token")
+		assert.Contains(t, response, "status")
 	})
 
 	t.Run("valid token redirects to dashboard", func(t *testing.T) {
@@ -110,7 +111,7 @@ func TestAPIBackwardCompatibility_CallbackEndpoint(t *testing.T) {
 
 		cookies := w.Result().Cookies()
 		require.Len(t, cookies, 1)
-		assert.Equal(t, "auth_token", cookies[0].Name)
+		assert.Equal(t, "jwt_user_token", cookies[0].Name)
 		assert.True(t, cookies[0].HttpOnly)
 	})
 
@@ -146,8 +147,8 @@ func TestAPIBackwardCompatibility_CallbackEndpoint(t *testing.T) {
 		err = json.Unmarshal(w.Body.Bytes(), &response)
 		require.NoError(t, err)
 
-		assert.Contains(t, response["message"], "Invalid authentication token")
-		assert.NotEmpty(t, response["request_id"])
+		assert.Contains(t, response["error"], "Invalid authentication token")
+		assert.Contains(t, response, "status")
 	})
 }
 
@@ -167,7 +168,7 @@ func TestAPIBackwardCompatibility_LogoutEndpoint(t *testing.T) {
 
 	cookies := w.Result().Cookies()
 	require.Len(t, cookies, 1)
-	assert.Equal(t, "auth_token", cookies[0].Name)
+	assert.Equal(t, "jwt_user_token", cookies[0].Name)
 	assert.Equal(t, "", cookies[0].Value)
 	assert.Equal(t, -1, cookies[0].MaxAge)
 }
@@ -191,8 +192,8 @@ func TestAPIBackwardCompatibility_TodosEndpoint(t *testing.T) {
 		err := json.Unmarshal(w.Body.Bytes(), &response)
 		require.NoError(t, err)
 
-		assert.Contains(t, response["message"], "Missing authentication token")
-		assert.NotEmpty(t, response["request_id"])
+		assert.Contains(t, response["error"], "Missing authentication token")
+		assert.Contains(t, response, "status")
 	})
 
 	t.Run("valid token returns todos", func(t *testing.T) {
@@ -228,7 +229,10 @@ func TestAPIBackwardCompatibility_TodosEndpoint(t *testing.T) {
 		err = json.Unmarshal(w.Body.Bytes(), &response)
 		require.NoError(t, err)
 
-		assert.Contains(t, response, "items")
+		// Data is nested under "data" key in new response format
+		data, ok := response["data"].([]interface{})
+		require.True(t, ok, "response data should be an array")
+		assert.NotNil(t, data)
 	})
 
 	t.Run("token in cookie works", func(t *testing.T) {
@@ -255,7 +259,7 @@ func TestAPIBackwardCompatibility_TodosEndpoint(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodGet, "/api/todos", nil)
 		req.AddCookie(&http.Cookie{
-			Name:  "auth_token",
+			Name:  "jwt_user_token",
 			Value: tokenString,
 		})
 		w := httptest.NewRecorder()
@@ -297,7 +301,7 @@ func TestAPIBackwardCompatibility_TodosEndpoint(t *testing.T) {
 		err = json.Unmarshal(w.Body.Bytes(), &response)
 		require.NoError(t, err)
 
-		assert.Contains(t, response["message"], "Token expired")
+		assert.Contains(t, response["error"], "Token expired")
 	})
 }
 
@@ -344,9 +348,14 @@ func TestAPIBackwardCompatibility_ErrorResponseFormat(t *testing.T) {
 			// Verify error response structure
 			assert.Contains(t, response, "error")
 			assert.Contains(t, response, "message")
-			assert.Contains(t, response, "request_id")
-			assert.Contains(t, response["message"], tt.errorContains)
-			assert.NotEmpty(t, response["request_id"])
+			assert.Contains(t, response, "status")
+			assert.Contains(t, response["error"], tt.errorContains)
+
+			// Verify status block structure
+			status, ok := response["status"].(map[string]interface{})
+			require.True(t, ok, "status should be an object")
+			assert.Contains(t, status, "code")
+			assert.Contains(t, status, "message")
 		})
 	}
 }
@@ -419,14 +428,9 @@ func setupCompatibilityTestRouter(t *testing.T) *gin.Engine {
 	api.Use(func(c *gin.Context) {
 		// Simple auth check for compatibility tests
 		token := c.GetHeader("Authorization")
-		cookie, _ := c.Cookie("auth_token")
+		cookie, _ := c.Cookie("jwt_user_token")
 		if token == "" && cookie == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"error":      "Unauthorized",
-				"message":    "Missing authentication token",
-				"code":       http.StatusUnauthorized,
-				"request_id": c.GetString("request_id"),
-			})
+			response.Unauthorized(c, "Missing authentication token")
 			c.Abort()
 			return
 		}

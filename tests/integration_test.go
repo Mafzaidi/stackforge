@@ -166,7 +166,7 @@ func TestFullSSOLoginFlow(t *testing.T) {
 	// Verify cookie was set
 	cookies := w.Result().Cookies()
 	require.Len(t, cookies, 1)
-	assert.Equal(t, "auth_token", cookies[0].Name)
+	assert.Equal(t, "jwt_user_token", cookies[0].Name)
 	assert.Equal(t, tokenString, cookies[0].Value)
 	assert.True(t, cookies[0].HttpOnly)
 
@@ -510,7 +510,7 @@ func TestTokenInCookieVsHeader(t *testing.T) {
 	t.Run("token in cookie", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/api/todos", nil)
 		req.AddCookie(&http.Cookie{
-			Name:  "auth_token",
+			Name:  "jwt_user_token",
 			Value: tokenString,
 		})
 		w := httptest.NewRecorder()
@@ -612,7 +612,7 @@ func TestLogoutFlow(t *testing.T) {
 	// Verify cookie was cleared
 	cookies := w.Result().Cookies()
 	require.Len(t, cookies, 1)
-	assert.Equal(t, "auth_token", cookies[0].Name)
+	assert.Equal(t, "jwt_user_token", cookies[0].Name)
 	assert.Equal(t, "", cookies[0].Value)
 	assert.Equal(t, -1, cookies[0].MaxAge)
 }

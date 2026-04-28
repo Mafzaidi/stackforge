@@ -4,10 +4,23 @@ import "time"
 
 // Credential represents a credential item in the domain.
 type Credential struct {
-	ID        string
-	Name      string
-	Username  string
-	Secret    string // encrypted in real impl
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	ID                string
+	UserID            string
+	VaultID           string
+	CategoryID        string
+	Title             string
+	SiteUrl           string
+	FaviconUrl        *string
+	UsernameEncrypted string
+	PasswordEncrypted string
+	NotesEncrypted    *string
+	IsFavorite        bool
+	PasswordStrength  int64
+	LastUsedAt        *time.Time
+	PasswordChangedAt *time.Time
+	ExpiresAt         *time.Time
+	AutoLogin         bool
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
+	Tags              []*Tag
 }

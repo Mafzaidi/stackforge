@@ -17,6 +17,6 @@ func NewListUseCase(repo repository.CredentialRepository) ListUseCase {
 }
 
 // Execute retrieves all credentials from the repository.
-func (uc *listUseCase) Execute(ctx context.Context) ([]*entity.Credential, error) {
-	return uc.repo.List(ctx)
+func (uc *listUseCase) Execute(ctx context.Context, limit, offset int) ([]*entity.Credential, error) {
+	return uc.repo.List(ctx, limit, offset)
 }

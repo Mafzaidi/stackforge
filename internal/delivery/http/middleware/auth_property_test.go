@@ -22,7 +22,7 @@ import (
 // **Validates: Requirements 2.1**
 // Property 8: Token Extraction from Multiple Sources
 // For any valid JWT token, if it's provided in either the Authorization header
-// (as "Bearer <token>") or in the auth_token cookie, the Auth_Middleware should
+// (as "Bearer <token>") or in the jwt_user_token cookie, the Auth_Middleware should
 // successfully extract and validate it.
 func TestProperty_TokenExtractionFromMultipleSources(t *testing.T) {
 	parameters := gopter.DefaultTestParameters()
@@ -148,7 +148,7 @@ func TestProperty_TokenExtractionFromMultipleSources(t *testing.T) {
 			// Test with cookie
 			req := httptest.NewRequest(http.MethodGet, "/test", nil)
 			req.AddCookie(&http.Cookie{
-				Name:  "auth_token",
+				Name:  "jwt_user_token",
 				Value: tokenString,
 			})
 			w := httptest.NewRecorder()
@@ -236,7 +236,7 @@ func TestProperty_TokenExtractionFromMultipleSources(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, "/test", nil)
 			req.Header.Set("Authorization", "Bearer "+headerToken)
 			req.AddCookie(&http.Cookie{
-				Name:  "auth_token",
+				Name:  "jwt_user_token",
 				Value: cookieToken,
 			})
 			w := httptest.NewRecorder()

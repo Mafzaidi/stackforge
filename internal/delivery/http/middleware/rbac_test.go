@@ -559,15 +559,15 @@ func TestRBACErrorResponseFormat(t *testing.T) {
 			assert.Equal(t, tt.expectedStatus, w.Code)
 
 			// Parse and verify error response format
-			var errorResp response.ErrorResponse
+			var errorResp response.Response
 			err := json.Unmarshal(w.Body.Bytes(), &errorResp)
 			assert.NoError(t, err, "Response should be valid JSON")
 
 			// Verify error response fields
-			assert.Equal(t, tt.expectedError, errorResp.Error, "Error type should match")
-			assert.Equal(t, tt.expectedMessage, errorResp.Message, "Error message should match")
-			assert.Equal(t, tt.expectedStatusCode, errorResp.Code, "Status code in response should match")
-			assert.Equal(t, "test-request-id", errorResp.RequestID, "Request ID should be included")
+			assert.Equal(t, tt.expectedError, errorResp.Status.Message, "Status message should match error type")
+			assert.Equal(t, tt.expectedStatusCode, errorResp.Status.Code, "Status code in response should match")
+			assert.Equal(t, tt.expectedMessage, errorResp.Error, "Error detail should match")
+			assert.Equal(t, "error occurred", errorResp.Status.Message, "Message should be 'error occurred'")
 		})
 	}
 }
@@ -1007,10 +1007,10 @@ func TestRBACMissingClaimsErrorHandling(t *testing.T) {
 			assert.Equal(t, tt.expectedStatus, w.Code)
 
 			// Parse and verify error message
-			var errorResp response.ErrorResponse
+			var errorResp response.Response
 			err := json.Unmarshal(w.Body.Bytes(), &errorResp)
 			assert.NoError(t, err)
-			assert.Equal(t, tt.expectedError, errorResp.Message)
+			assert.Equal(t, tt.expectedError, errorResp.Error)
 		})
 	}
 }

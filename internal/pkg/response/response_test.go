@@ -11,200 +11,213 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestRespondWithError(t *testing.T) {
+func setupTestContext() (*httptest.ResponseRecorder, *gin.Context) {
 	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/test", nil)
+	return w, c
+}
 
+func TestRespondError(t *testing.T) {
 	tests := []struct {
-		name       string
-		statusCode int
-		errorType  string
-		message    string
-		requestID  string
+		name          string
+		statusCode    int
+		statusMessage string
+		errDetail     string
 	}{
-		{
-			name:       "unauthorized error with request ID",
-			statusCode: http.StatusUnauthorized,
-			errorType:  "Unauthorized",
-			message:    "Missing authentication token",
-			requestID:  "test-request-123",
-		},
-		{
-			name:       "forbidden error with request ID",
-			statusCode: http.StatusForbidden,
-			errorType:  "Forbidden",
-			message:    "Insufficient permissions",
-			requestID:  "test-request-456",
-		},
-		{
-			name:       "error without request ID",
-			statusCode: http.StatusBadRequest,
-			errorType:  "Bad Request",
-			message:    "Invalid input",
-			requestID:  "",
-		},
+		{"unauthorized", http.StatusUnauthorized, "Unauthorized", "invalid token"},
+		{"forbidden", http.StatusForbidden, "Forbidden", "missing role"},
+		{"bad request", http.StatusBadRequest, "Bad Request", "invalid input"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			w := httptest.NewRecorder()
-			c, _ := gin.CreateTestContext(w)
-			c.Request = httptest.NewRequest(http.MethodGet, "/test", nil)
+			w, c := setupTestContext()
 
-			// Set request ID if provided
-			if tt.requestID != "" {
-				c.Set(RequestIDKey, tt.requestID)
-			}
-
-			RespondWithError(c, tt.statusCode, tt.errorType, tt.message)
+			writeError(c, tt.statusCode, tt.statusMessage, tt.errDetail)
 
 			assert.Equal(t, tt.statusCode, w.Code)
 
-			var response ErrorResponse
-			err := json.Unmarshal(w.Body.Bytes(), &response)
+			var resp Response
+			err := json.Unmarshal(w.Body.Bytes(), &resp)
 			require.NoError(t, err)
 
-			assert.Equal(t, tt.errorType, response.Error)
-			assert.Equal(t, tt.message, response.Message)
-			assert.Equal(t, tt.statusCode, response.Code)
-			assert.Equal(t, tt.requestID, response.RequestID)
+			assert.Equal(t, tt.statusCode, resp.Status.Code)
+			assert.Equal(t, tt.statusMessage, resp.Status.Message)
+			assert.Equal(t, "error occurred", resp.Error)
+			assert.Equal(t, tt.errDetail, resp.Error)
 		})
 	}
 }
 
 func TestUnauthorized(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	w := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(w)
-	c.Request = httptest.NewRequest(http.MethodGet, "/test", nil)
-	c.Set(RequestIDKey, "test-request-789")
+	w, c := setupTestContext()
 
 	Unauthorized(c, "Token expired")
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 
-	var response ErrorResponse
-	err := json.Unmarshal(w.Body.Bytes(), &response)
+	var resp Response
+	err := json.Unmarshal(w.Body.Bytes(), &resp)
 	require.NoError(t, err)
 
-	assert.Equal(t, "Unauthorized", response.Error)
-	assert.Equal(t, "Token expired", response.Message)
-	assert.Equal(t, http.StatusUnauthorized, response.Code)
-	assert.Equal(t, "test-request-789", response.RequestID)
+	assert.Equal(t, http.StatusUnauthorized, resp.Status.Code)
+	assert.Equal(t, "Unauthorized", resp.Status.Message)
+	assert.Equal(t, "Token expired", resp.Error)
 }
 
 func TestForbidden(t *testing.T) {
-	gin.SetMode(gin.TestMode)
+	w, c := setupTestContext()
 
-	w := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(w)
-	c.Request = httptest.NewRequest(http.MethodGet, "/test", nil)
-	c.Set(RequestIDKey, "test-request-abc")
-
-	Forbidden(c, "Insufficient permissions: missing required role")
+	Forbidden(c, "Insufficient permissions")
 
 	assert.Equal(t, http.StatusForbidden, w.Code)
 
-	var response ErrorResponse
-	err := json.Unmarshal(w.Body.Bytes(), &response)
+	var resp Response
+	err := json.Unmarshal(w.Body.Bytes(), &resp)
 	require.NoError(t, err)
 
-	assert.Equal(t, "Forbidden", response.Error)
-	assert.Equal(t, "Insufficient permissions: missing required role", response.Message)
-	assert.Equal(t, http.StatusForbidden, response.Code)
-	assert.Equal(t, "test-request-abc", response.RequestID)
+	assert.Equal(t, http.StatusForbidden, resp.Status.Code)
+	assert.Equal(t, "Forbidden", resp.Status.Message)
+	assert.Equal(t, "Insufficient permissions", resp.Error)
 }
 
 func TestBadRequest(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	w := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(w)
-	c.Request = httptest.NewRequest(http.MethodGet, "/test", nil)
-	c.Set(RequestIDKey, "test-request-def")
+	w, c := setupTestContext()
 
 	BadRequest(c, "Missing required parameter")
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 
-	var response ErrorResponse
-	err := json.Unmarshal(w.Body.Bytes(), &response)
+	var resp Response
+	err := json.Unmarshal(w.Body.Bytes(), &resp)
 	require.NoError(t, err)
 
-	assert.Equal(t, "Bad Request", response.Error)
-	assert.Equal(t, "Missing required parameter", response.Message)
-	assert.Equal(t, http.StatusBadRequest, response.Code)
-	assert.Equal(t, "test-request-def", response.RequestID)
+	assert.Equal(t, http.StatusBadRequest, resp.Status.Code)
+	assert.Equal(t, "Bad Request", resp.Status.Message)
+	assert.Equal(t, "Missing required parameter", resp.Error)
 }
 
 func TestInternalServerError(t *testing.T) {
-	gin.SetMode(gin.TestMode)
+	w, c := setupTestContext()
 
-	w := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(w)
-	c.Request = httptest.NewRequest(http.MethodGet, "/test", nil)
-	c.Set(RequestIDKey, "test-request-ghi")
-
-	InternalServerError(c, "Authentication service configuration error")
+	InternalServerError(c, "something went wrong")
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 
-	var response ErrorResponse
-	err := json.Unmarshal(w.Body.Bytes(), &response)
+	var resp Response
+	err := json.Unmarshal(w.Body.Bytes(), &resp)
 	require.NoError(t, err)
 
-	assert.Equal(t, "Internal Server Error", response.Error)
-	assert.Equal(t, "Authentication service configuration error", response.Message)
-	assert.Equal(t, http.StatusInternalServerError, response.Code)
-	assert.Equal(t, "test-request-ghi", response.RequestID)
+	assert.Equal(t, http.StatusInternalServerError, resp.Status.Code)
+	assert.Equal(t, "Internal Server Error", resp.Status.Message)
+	assert.Equal(t, "something went wrong", resp.Error)
 }
 
 func TestServiceUnavailable(t *testing.T) {
-	gin.SetMode(gin.TestMode)
+	w, c := setupTestContext()
 
-	w := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(w)
-	c.Request = httptest.NewRequest(http.MethodGet, "/test", nil)
-	c.Set(RequestIDKey, "test-request-jkl")
-
-	ServiceUnavailable(c, "Authentication service unavailable")
+	ServiceUnavailable(c, "database unreachable")
 
 	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
 
-	var response ErrorResponse
-	err := json.Unmarshal(w.Body.Bytes(), &response)
+	var resp Response
+	err := json.Unmarshal(w.Body.Bytes(), &resp)
 	require.NoError(t, err)
 
-	assert.Equal(t, "Service Unavailable", response.Error)
-	assert.Equal(t, "Authentication service unavailable", response.Message)
-	assert.Equal(t, http.StatusServiceUnavailable, response.Code)
-	assert.Equal(t, "test-request-jkl", response.RequestID)
+	assert.Equal(t, http.StatusServiceUnavailable, resp.Status.Code)
+	assert.Equal(t, "Service Unavailable", resp.Status.Message)
+	assert.Equal(t, "database unreachable", resp.Error)
 }
 
-func TestErrorResponseFormat(t *testing.T) {
-	gin.SetMode(gin.TestMode)
+func TestSuccess(t *testing.T) {
+	w, c := setupTestContext()
 
-	w := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(w)
-	c.Request = httptest.NewRequest(http.MethodGet, "/test", nil)
-	c.Set(RequestIDKey, "test-request-mno")
+	data := gin.H{"id": "123", "name": "test"}
+	Success(c, "Item retrieved successfully", data)
 
-	Unauthorized(c, "Test message")
+	assert.Equal(t, http.StatusOK, w.Code)
 
-	// Verify JSON structure
-	var rawJSON map[string]interface{}
-	err := json.Unmarshal(w.Body.Bytes(), &rawJSON)
+	var resp Response
+	err := json.Unmarshal(w.Body.Bytes(), &resp)
 	require.NoError(t, err)
 
-	// Verify all required fields are present
-	assert.Contains(t, rawJSON, "error")
-	assert.Contains(t, rawJSON, "message")
-	assert.Contains(t, rawJSON, "code")
-	assert.Contains(t, rawJSON, "request_id")
+	assert.Equal(t, http.StatusOK, resp.Status.Code)
+	assert.Equal(t, "Item retrieved successfully", resp.Status.Message)
+	assert.NotNil(t, resp.Data)
+}
 
-	// Verify field types
-	assert.IsType(t, "", rawJSON["error"])
-	assert.IsType(t, "", rawJSON["message"])
-	assert.IsType(t, float64(0), rawJSON["code"]) // JSON numbers are float64
-	assert.IsType(t, "", rawJSON["request_id"])
+func TestCreated(t *testing.T) {
+	w, c := setupTestContext()
+
+	data := gin.H{"id": "456"}
+	Created(c, "Item created successfully", data)
+
+	assert.Equal(t, http.StatusCreated, w.Code)
+
+	var resp Response
+	err := json.Unmarshal(w.Body.Bytes(), &resp)
+	require.NoError(t, err)
+
+	assert.Equal(t, http.StatusCreated, resp.Status.Code)
+	assert.Equal(t, "Item created successfully", resp.Status.Message)
+	assert.NotNil(t, resp.Data)
+}
+
+func TestSuccessWithNilData(t *testing.T) {
+	w, c := setupTestContext()
+
+	Success(c, "Operation completed", nil)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var resp Response
+	err := json.Unmarshal(w.Body.Bytes(), &resp)
+	require.NoError(t, err)
+
+	assert.Equal(t, http.StatusOK, resp.Status.Code)
+	assert.Equal(t, "Operation completed", resp.Status.Message)
+	assert.Nil(t, resp.Data)
+}
+
+func TestErrorResponseJSONStructure(t *testing.T) {
+	w, c := setupTestContext()
+
+	Unauthorized(c, "invalid token")
+
+	var raw map[string]interface{}
+	err := json.Unmarshal(w.Body.Bytes(), &raw)
+	require.NoError(t, err)
+
+	// Verify top-level keys
+	assert.Contains(t, raw, "status")
+	assert.Contains(t, raw, "message")
+	assert.Contains(t, raw, "error")
+
+	// Verify status block
+	status, ok := raw["status"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Contains(t, status, "code")
+	assert.Contains(t, status, "message")
+}
+
+func TestSuccessResponseJSONStructure(t *testing.T) {
+	w, c := setupTestContext()
+
+	Success(c, "ok", gin.H{"items": []string{"a", "b"}})
+
+	var raw map[string]interface{}
+	err := json.Unmarshal(w.Body.Bytes(), &raw)
+	require.NoError(t, err)
+
+	// Verify top-level keys
+	assert.Contains(t, raw, "status")
+	assert.Contains(t, raw, "data")
+
+	// Verify status block
+	status, ok := raw["status"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Contains(t, status, "code")
+	assert.Contains(t, status, "message")
 }

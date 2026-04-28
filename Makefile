@@ -11,11 +11,11 @@ COMMIT := $(shell git rev-parse --short HEAD)
 BUILD_TIME := $(shell date -u '+%Y-%m-%d_%H:%M:%S')
 
 MIGRATE := $(HOME)/go/bin/migrate
-DB_URL = postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_DB_HOST):$(POSTGRES_DB_PORT)/$(POSTGRES_DB_NAME)?sslmode=disable
-MIGRATION_PATH := internal/migrations
+DB_URL = postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/$(POSTGRES_DATABASE)?sslmode=disable
+MIGRATION_PATH := migrations
 
 migrate-create:
-	migrate create -ext sql -dir internal/migrations $(name)
+	$(MIGRATE) create -ext sql -dir $(MIGRATION_PATH) -seq $(MIGRATION_NAME)
 
 migrate-up:
 	$(MIGRATE) -path $(MIGRATION_PATH) -database "$(DB_URL)" up

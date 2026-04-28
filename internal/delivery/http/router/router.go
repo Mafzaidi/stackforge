@@ -8,11 +8,15 @@ import (
 
 // RouterConfig holds all dependencies needed for route registration
 type RouterConfig struct {
-	AuthHandler       *handler.AuthHandler
-	TodoHandler       *handler.TodoHandler
-	CredentialHandler *handler.CredentialHandler
-	HealthHandler     *handler.HealthHandler
-	AuthMiddleware    gin.HandlerFunc
+	AuthHandler         *handler.AuthHandler
+	MasterDataHandler   *handler.MasterDataHandler
+	UserProfilesHandler *handler.UserProfilesHandler
+	TodoHandler         *handler.TodoHandler
+	CredentialHandler   *handler.CredentialHandler
+	MenuHandler         *handler.MenuHandler
+	VaultHandler        *handler.VaultHandler
+	HealthHandler       *handler.HealthHandler
+	AuthMiddleware      gin.HandlerFunc
 }
 
 // Setup creates and configures the main router with all routes
@@ -27,7 +31,16 @@ func Setup(cfg *RouterConfig) *gin.Engine {
 	// Register route groups
 	RegisterAuthRoutes(router, cfg.AuthHandler)
 	RegisterHealthRoutes(router, cfg.HealthHandler)
-	RegisterAPIRoutes(router, cfg.TodoHandler, cfg.CredentialHandler, cfg.AuthMiddleware)
+	RegisterAPIRoutes(
+		router,
+		cfg.MasterDataHandler,
+		cfg.UserProfilesHandler,
+		cfg.TodoHandler,
+		cfg.CredentialHandler,
+		cfg.MenuHandler,
+		cfg.VaultHandler,
+		cfg.AuthMiddleware,
+	)
 
 	return router
 }

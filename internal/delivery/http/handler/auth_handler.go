@@ -5,17 +5,16 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/mafzaidi/stackforge/internal/delivery/http/middleware"
 	"github.com/mafzaidi/stackforge/internal/domain/entity"
 	"github.com/mafzaidi/stackforge/internal/domain/service"
-	"github.com/mafzaidi/stackforge/internal/delivery/http/middleware"
 	"github.com/mafzaidi/stackforge/internal/pkg/response"
 	"github.com/mafzaidi/stackforge/internal/usecase/auth"
 )
 
 const (
-	authCookieName = "auth_token"
+	authCookieName = "jwt_user_token"
 	cookiePath     = "/"
-	cookieMaxAge   = 3600 // 1 hour in seconds
 )
 
 // AuthHandler handles authentication HTTP requests

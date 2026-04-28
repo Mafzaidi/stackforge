@@ -303,7 +303,7 @@ func TestConnectPostgreSQL_GetClientBeforeConnect(t *testing.T) {
 	log := newTestLogger()
 	cm := NewConnectionManager(cfg, log)
 
-	client := cm.GetPostgresClient()
+	client := cm.GetPostgresGormClient()
 
 	if client != nil {
 		t.Error("Expected nil client before connection, got non-nil")
@@ -336,7 +336,7 @@ func TestConnectPostgreSQL_ConnectionPoolConfiguration(t *testing.T) {
 	_ = cm.ConnectPostgreSQL(ctx)
 	
 	// If we got a client (unlikely without real DB), verify it's not nil
-	client := cm.GetPostgresClient()
+	client := cm.GetPostgresGormClient()
 	if client != nil {
 		// Verify pool settings would be applied
 		// In a real scenario with testcontainers, we'd verify:
@@ -365,7 +365,7 @@ func TestGetMongoClient_ReturnsCorrectClient(t *testing.T) {
 	// Integration tests with testcontainers will verify the full flow
 }
 
-// TestGetPostgresClient_ReturnsCorrectClient verifies GetPostgresClient returns the correct client
+// TestGetPostgresClient_ReturnsCorrectClient verifies GetPostgresGormClient returns the correct client
 // Requirements: 3.5
 func TestGetPostgresClient_ReturnsCorrectClient(t *testing.T) {
 	cfg := &config.DatabaseConfig{}
@@ -373,7 +373,7 @@ func TestGetPostgresClient_ReturnsCorrectClient(t *testing.T) {
 	cm := NewConnectionManager(cfg, log)
 
 	// Before connection, should return nil
-	if client := cm.GetPostgresClient(); client != nil {
+	if client := cm.GetPostgresGormClient(); client != nil {
 		t.Error("Expected nil client before connection")
 	}
 
@@ -395,7 +395,7 @@ func TestGetClients_ThreadSafety(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		go func() {
 			_ = cm.GetMongoClient()
-			_ = cm.GetPostgresClient()
+			_ = cm.GetPostgresGormClient()
 			done <- true
 		}()
 	}
@@ -598,7 +598,7 @@ func TestCheckPostgreSQL_ContextCancellation(t *testing.T) {
 	_ = cm.ConnectPostgreSQL(ctx)
 
 	// If client was created (unlikely without real DB), test with cancelled context
-	if cm.GetPostgresClient() != nil {
+	if cm.GetPostgresGormClient() != nil {
 		hc := NewHealthChecker(cm, log)
 		
 		// Create cancelled context
@@ -638,7 +638,7 @@ func TestCheckPostgreSQL_TimeoutRespected(t *testing.T) {
 	_ = cm.ConnectPostgreSQL(ctx)
 
 	// If client was created, test timeout
-	if cm.GetPostgresClient() != nil {
+	if cm.GetPostgresGormClient() != nil {
 		hc := NewHealthChecker(cm, log)
 
 		start := time.Now()

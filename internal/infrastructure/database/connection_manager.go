@@ -35,7 +35,7 @@
 //
 //	// Use the clients
 //	mongoClient := connMgr.GetMongoClient()
-//	postgresClient := connMgr.GetPostgresClient()
+//	postgresClient := connMgr.GetPostgresGormClient()
 //
 //	// Setup health checker
 //	healthChecker := database.NewHealthChecker(connMgr, logger)
@@ -80,7 +80,6 @@ package database
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"os"
 	"os/signal"
@@ -90,9 +89,10 @@ import (
 
 	"github.com/mafzaidi/stackforge/internal/infrastructure/config"
 	"github.com/mafzaidi/stackforge/internal/infrastructure/logger"
-	_ "github.com/lib/pq" // PostgreSQL driver
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
 
 // ConnectionManager manages database connections for MongoDB and PostgreSQL.
@@ -103,11 +103,11 @@ import (
 //
 // ConnectionManager is safe for concurrent use after initialization.
 type ConnectionManager struct {
-	mongoClient    *mongo.Client
-	postgresClient *sql.DB
-	config         *config.DatabaseConfig
-	logger         *logger.Logger
-	shutdownOnce   sync.Once
+	mongoClient  *mongo.Client
+	gormClient   *gorm.DB
+	config       *config.DatabaseConfig
+	logger       *logger.Logger
+	shutdownOnce sync.Once
 }
 
 // NewConnectionManager creates a new connection manager with the provided configuration and logger.
@@ -139,15 +139,15 @@ func (cm *ConnectionManager) GetMongoClient() *mongo.Client {
 	return cm.mongoClient
 }
 
-// GetPostgresClient returns the connected PostgreSQL client.
+// GetPostgresGormClient returns the connected GORM PostgreSQL client.
 //
 // This method should only be called after successfully calling ConnectPostgreSQL.
 // Returns nil if PostgreSQL connection has not been established.
 //
 // The returned client is safe for concurrent use and managed by the ConnectionManager.
-// Do not call Close on the returned client directly; use ConnectionManager.Shutdown instead.
-func (cm *ConnectionManager) GetPostgresClient() *sql.DB {
-	return cm.postgresClient
+// Do not close the returned client directly; use ConnectionManager.Shutdown instead.
+func (cm *ConnectionManager) GetPostgresGormClient() *gorm.DB {
+	return cm.gormClient
 }
 
 // retryConnect implements exponential backoff retry logic for database connections.
@@ -302,24 +302,25 @@ func (cm *ConnectionManager) ConnectMongoDB(ctx context.Context) error {
 }
 
 
-// ConnectPostgreSQL establishes a PostgreSQL connection with retry logic and connection pooling.
+// ConnectPostgreSQL establishes a PostgreSQL connection via GORM with retry logic and connection pooling.
 //
-// This method creates a PostgreSQL client with the following pool configuration:
+// This method creates a GORM client with the following pool configuration (via underlying *sql.DB):
 //   - MaxOpenConns: 100 connections
 //   - MaxIdleConns: 10 connections
 //   - ConnMaxLifetime: 1 hour
 //   - ConnMaxIdleTime: 5 minutes
 //
+// Auto-migration is disabled — schema is managed by golang-migrate.
+//
 // The connection is established using exponential backoff retry logic (up to 3 attempts).
-// On success, the PostgreSQL client is stored and can be retrieved via GetPostgresClient.
+// On success, the GORM client is stored and can be retrieved via GetPostgresGormClient.
 //
 // Parameters:
 //   - ctx: Context for connection timeout and cancellation
 //
 // Returns nil on successful connection, or an error if all retry attempts fail.
-// The error includes details about the failure and number of attempts made.
 //
-// Requirements: 3.1, 3.2, 3.3, 7.1, 7.2
+// Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 9.3
 func (cm *ConnectionManager) ConnectPostgreSQL(ctx context.Context) error {
 	cm.logger.Info("Starting PostgreSQL connection", logger.Fields{
 		"host":     cm.config.PostgreSQL.Host,
@@ -328,8 +329,8 @@ func (cm *ConnectionManager) ConnectPostgreSQL(ctx context.Context) error {
 	})
 
 	connectFunc := func(ctx context.Context) error {
-		// Build PostgreSQL connection string
-		connStr := fmt.Sprintf(
+		// Build PostgreSQL DSN for GORM
+		dsn := fmt.Sprintf(
 			"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
 			cm.config.PostgreSQL.Host,
 			cm.config.PostgreSQL.Port,
@@ -339,29 +340,34 @@ func (cm *ConnectionManager) ConnectPostgreSQL(ctx context.Context) error {
 			cm.config.PostgreSQL.SSLMode,
 		)
 
-		// Open PostgreSQL connection
-		db, err := sql.Open("postgres", connStr)
+		// Open GORM connection with auto-migration disabled
+		db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 		if err != nil {
-			return fmt.Errorf("failed to open PostgreSQL connection: %w", err)
+			return fmt.Errorf("failed to open GORM PostgreSQL connection: %w", err)
+		}
+
+		// Get underlying *sql.DB to configure connection pool
+		sqlDB, err := db.DB()
+		if err != nil {
+			return fmt.Errorf("failed to get underlying sql.DB from GORM: %w", err)
 		}
 
 		// Configure connection pool
-		db.SetMaxOpenConns(100)
-		db.SetMaxIdleConns(10)
-		db.SetConnMaxLifetime(1 * time.Hour)
-		db.SetConnMaxIdleTime(5 * time.Minute)
+		sqlDB.SetMaxOpenConns(100)
+		sqlDB.SetMaxIdleConns(10)
+		sqlDB.SetConnMaxLifetime(1 * time.Hour)
+		sqlDB.SetConnMaxIdleTime(5 * time.Minute)
 
 		// Ping to verify connection
 		pingCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 
-		if err := db.PingContext(pingCtx); err != nil {
-			// Close the connection if ping fails
-			_ = db.Close()
+		if err := sqlDB.PingContext(pingCtx); err != nil {
+			_ = sqlDB.Close()
 			return fmt.Errorf("failed to ping PostgreSQL: %w", err)
 		}
 
-		cm.postgresClient = db
+		cm.gormClient = db
 		return nil
 	}
 
@@ -378,10 +384,10 @@ func (cm *ConnectionManager) ConnectPostgreSQL(ctx context.Context) error {
 		"port":     cm.config.PostgreSQL.Port,
 		"database": cm.config.PostgreSQL.Database,
 		"pool_config": map[string]interface{}{
-			"max_open_conns":      100,
-			"max_idle_conns":      10,
-			"conn_max_lifetime":   "1h",
-			"conn_max_idle_time":  "5m",
+			"max_open_conns":     100,
+			"max_idle_conns":     10,
+			"conn_max_lifetime":  "1h",
+			"conn_max_idle_time": "5m",
 		},
 	})
 
@@ -495,24 +501,34 @@ func (hc *HealthChecker) CheckMongoDB(ctx context.Context) DatabaseHealth {
 
 // CheckPostgreSQL checks the health of the PostgreSQL connection.
 //
-// This method pings the PostgreSQL server with a 5-second timeout and measures
-// the response latency. If the client is not initialized or the ping fails,
-// it returns an unhealthy status with error details.
+// This method gets the underlying *sql.DB from GORM, then pings the PostgreSQL
+// server with a 5-second timeout and measures the response latency.
+// If the client is not initialized or the ping fails, it returns an unhealthy status.
 //
 // Parameters:
 //   - ctx: Context for health check cancellation
 //
 // Returns DatabaseHealth with status, error message (if any), and latency.
 //
-// Requirements: 4.2, 4.3, 4.4, 4.5
+// Requirements: 7.1, 7.2, 7.3
 func (hc *HealthChecker) CheckPostgreSQL(ctx context.Context) DatabaseHealth {
 	const healthCheckTimeout = 5 * time.Second
 
-	// Check if PostgreSQL client is available
-	if hc.connManager.postgresClient == nil {
+	// Check if GORM client is available
+	if hc.connManager.gormClient == nil {
 		return DatabaseHealth{
 			Status:  "unhealthy",
 			Message: "PostgreSQL client not initialized",
+			Latency: 0,
+		}
+	}
+
+	// Get underlying *sql.DB from GORM
+	sqlDB, err := hc.connManager.gormClient.DB()
+	if err != nil {
+		return DatabaseHealth{
+			Status:  "unhealthy",
+			Message: fmt.Sprintf("failed to get underlying sql.DB: %v", err),
 			Latency: 0,
 		}
 	}
@@ -523,7 +539,7 @@ func (hc *HealthChecker) CheckPostgreSQL(ctx context.Context) DatabaseHealth {
 
 	// Measure latency
 	start := time.Now()
-	err := hc.connManager.postgresClient.PingContext(pingCtx)
+	err = sqlDB.PingContext(pingCtx)
 	latency := time.Since(start)
 
 	if err != nil {
@@ -645,7 +661,7 @@ func (cm *ConnectionManager) Shutdown(ctx context.Context) error {
 
 		// Shutdown PostgreSQL connection
 		go func() {
-			if cm.postgresClient == nil {
+			if cm.gormClient == nil {
 				cm.logger.Info("PostgreSQL client not initialized, skipping shutdown", logger.Fields{})
 				postgresDone <- nil
 				return
@@ -657,10 +673,20 @@ func (cm *ConnectionManager) Shutdown(ctx context.Context) error {
 			postgresCtx, postgresCancel := context.WithTimeout(ctx, shutdownTimeout)
 			defer postgresCancel()
 
-			// PostgreSQL Close() doesn't accept context, so we use a goroutine with timeout
+			// Get underlying *sql.DB from GORM to close the connection
+			sqlDB, err := cm.gormClient.DB()
+			if err != nil {
+				cm.logger.Error("Failed to get underlying sql.DB from GORM", logger.Fields{
+					"error": err.Error(),
+				})
+				postgresDone <- fmt.Errorf("postgresql shutdown failed: could not get sql.DB: %w", err)
+				return
+			}
+
+			// Close the underlying sql.DB with timeout
 			errChan := make(chan error, 1)
 			go func() {
-				errChan <- cm.postgresClient.Close()
+				errChan <- sqlDB.Close()
 			}()
 
 			select {

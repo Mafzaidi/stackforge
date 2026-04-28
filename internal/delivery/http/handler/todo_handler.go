@@ -1,7 +1,11 @@
 package handler
 
 import (
+	"fmt"
+
 	"github.com/gin-gonic/gin"
+	"github.com/mafzaidi/stackforge/internal/delivery/http/middleware"
+	"github.com/mafzaidi/stackforge/internal/delivery/http/serializer"
 	"github.com/mafzaidi/stackforge/internal/pkg/response"
 	"github.com/mafzaidi/stackforge/internal/usecase/todo"
 )
@@ -21,11 +25,14 @@ func NewTodoHandler(listUC todo.ListUseCase) *TodoHandler {
 // List returns all todos
 // GET /api/todos
 func (h *TodoHandler) List(c *gin.Context) {
+	claims := middleware.MustGetClaims(c) // will panic if no claims
+	userID := claims.Subject
+	fmt.Println(userID)
 	todos, err := h.listUC.Execute(c.Request.Context())
 	if err != nil {
 		response.InternalServerError(c, "Failed to list todos")
 		return
 	}
-	
-	response.Success(c, gin.H{"items": todos})
+
+	response.Success(c, "Todos retrieved successfully", serializer.FromTodoList(todos))
 }

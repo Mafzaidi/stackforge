@@ -90,7 +90,7 @@ func TestAuthMiddleware_ValidTokenFromCookie(t *testing.T) {
 	// Test with cookie
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.AddCookie(&http.Cookie{
-		Name:  "auth_token",
+		Name:  "jwt_user_token",
 		Value: "valid-token",
 	})
 	w := httptest.NewRecorder()
@@ -281,7 +281,7 @@ func TestExtractToken_FromCookie(t *testing.T) {
 	c, _ := gin.CreateTestContext(w)
 	c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
 	c.Request.AddCookie(&http.Cookie{
-		Name:  "auth_token",
+		Name:  "jwt_user_token",
 		Value: "cookie-token-123",
 	})
 
@@ -297,7 +297,7 @@ func TestExtractToken_HeaderPriorityOverCookie(t *testing.T) {
 	c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
 	c.Request.Header.Set("Authorization", "Bearer header-token")
 	c.Request.AddCookie(&http.Cookie{
-		Name:  "auth_token",
+		Name:  "jwt_user_token",
 		Value: "cookie-token",
 	})
 

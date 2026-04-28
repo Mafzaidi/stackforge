@@ -75,7 +75,7 @@ func AuthMiddleware(jwtService JWTValidator, log service.Logger) gin.HandlerFunc
 	}
 }
 
-// extractToken gets token from "Authorization: Bearer <token>" header or "auth_token" cookie
+// extractToken gets token from "Authorization: Bearer <token>" header or "jwt_user_token" cookie
 // Returns empty string if token is not found in either location
 func extractToken(c *gin.Context) string {
 	// Try Authorization header first
@@ -89,7 +89,7 @@ func extractToken(c *gin.Context) string {
 	}
 
 	// Try cookie as fallback
-	token, err := c.Cookie("auth_token")
+	token, err := c.Cookie("jwt_user_token")
 	if err == nil && token != "" {
 		return token
 	}

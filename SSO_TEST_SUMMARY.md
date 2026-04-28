@@ -101,7 +101,7 @@ This document summarizes the end-to-end testing results for the SSO Authenticati
 - [ ] Navigate to `/auth/login` redirects to Authorizer
 - [ ] Authorizer login page displays correctly
 - [ ] Successful login redirects back to Stackforge
-- [ ] `auth_token` cookie is set with correct attributes:
+- [ ] `jwt_user_token` cookie is set with correct attributes:
   - [ ] HttpOnly flag
   - [ ] Secure flag (in production)
   - [ ] SameSite=Lax

@@ -4,9 +4,31 @@ import (
 	"context"
 
 	"github.com/mafzaidi/stackforge/internal/domain/entity"
+	"github.com/mafzaidi/stackforge/internal/domain/repository"
 )
 
-// ListUseCase defines the interface for listing credentials.
+type CreateUseCase interface {
+	Execute(
+		ctx context.Context,
+		userID,
+		title,
+		siteUrl,
+		faviconUrl,
+		username,
+		password,
+		notes string,
+		isFavorite bool,
+		passwordStrength int32,
+		vaultID,
+		categoryID string,
+		tags []string,
+	) (*entity.Credential, error)
+}
+
 type ListUseCase interface {
-	Execute(ctx context.Context) ([]*entity.Credential, error)
+	Execute(ctx context.Context, limit, offset int) ([]*entity.Credential, error)
+}
+
+type ListByUserUseCase interface {
+	Execute(ctx context.Context, userID string, page, limit int) (*repository.PaginatedCredentials, error)
 }

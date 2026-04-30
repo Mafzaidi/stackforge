@@ -13,27 +13,56 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
+type vaultDocument struct {
+	ID          string    `bson:"id,omitempty"`
+	UserID      string    `bson:"user_id"`
+	Name        string    `bson:"name"`
+	Description string    `bson:"description"`
+	Icon        string    `bson:"icon"`
+	IsDefault   bool      `bson:"is_default"`
+	CreatedAt   time.Time `bson:"created_at"`
+	UpdatedAt   time.Time `bson:"updated_at"`
+}
+
+type masterDataDocument struct {
+	ID          string    `bson:"id,omitempty"`
+	Module      string    `bson:"module"`
+	Type        string    `bson:"type"`
+	Name        string    `bson:"name"`
+	Description string    `bson:"description"`
+	Icon        string    `bson:"icon"`
+	Color       string    `bson:"color"`
+	SortOrder   string    `bson:"sort_order"`
+	IsActive    bool      `bson:"is_active"`
+	Metadata    bson.M    `bson:"metadata,omitempty"`
+	CreatedAt   time.Time `bson:"created_at"`
+	UpdatedAt   time.Time `bson:"updated_at"`
+}
+
 // credentialDocument represents the MongoDB document structure for a credential.
 type credentialDocument struct {
-	ID                primitive.ObjectID `bson:"_id,omitempty"`
-	UserID            string             `bson:"user_id"`
-	VaultID           string             `bson:"vault_id"`
-	CategoryID        string             `bson:"category_id"`
-	Title             string             `bson:"title"`
-	SiteUrl           string             `bson:"site_url"`
-	FaviconUrl        *string            `bson:"favicon_url,omitempty"`
-	UsernameEncrypted string             `bson:"username_encrypted"`
-	PasswordEncrypted string             `bson:"password_encrypted"`
-	NotesEncrypted    *string            `bson:"notes_encrypted,omitempty"`
-	IsFavorite        bool               `bson:"is_favorite"`
-	PasswordStrength  int64              `bson:"password_strength"`
-	LastUsedAt        *time.Time         `bson:"last_used_at,omitempty"`
-	PasswordChangedAt *time.Time         `bson:"password_changed_at,omitempty"`
-	ExpiresAt         *time.Time         `bson:"expires_at,omitempty"`
-	AutoLogin         bool               `bson:"auto_login"`
-	CreatedAt         time.Time          `bson:"created_at"`
-	UpdatedAt         time.Time          `bson:"updated_at"`
-	Tags              []*entity.Tag      `bson:"tags,omitempty"`
+	ID                primitive.ObjectID  `bson:"_id,omitempty"`
+	CredemtialID      string              `bson:"credential_id,omitempty"`
+	UserID            string              `bson:"user_id"`
+	VaultID           string              `bson:"vault_id"`
+	CategoryID        string              `bson:"category_id"`
+	Title             string              `bson:"title"`
+	SiteUrl           string              `bson:"site_url"`
+	FaviconUrl        *string             `bson:"favicon_url,omitempty"`
+	UsernameEncrypted string              `bson:"username_encrypted"`
+	PasswordEncrypted string              `bson:"password_encrypted"`
+	NotesEncrypted    *string             `bson:"notes_encrypted,omitempty"`
+	IsFavorite        bool                `bson:"is_favorite"`
+	PasswordStrength  int64               `bson:"password_strength"`
+	LastUsedAt        *time.Time          `bson:"last_used_at,omitempty"`
+	PasswordChangedAt *time.Time          `bson:"password_changed_at,omitempty"`
+	ExpiresAt         *time.Time          `bson:"expires_at,omitempty"`
+	AutoLogin         bool                `bson:"auto_login"`
+	CreatedAt         time.Time           `bson:"created_at"`
+	UpdatedAt         time.Time           `bson:"updated_at"`
+	Vault             *vaultDocument      `bson:"vault,omitempty"`
+	Category          *masterDataDocument `bson:"category,omitempty"`
+	Tags              []*entity.Tag       `bson:"tags,omitempty"`
 }
 
 // credentialRepository implements repository.CredentialRepository using MongoDB.
@@ -65,7 +94,7 @@ func (r *credentialRepository) EnsureIndexes(ctx context.Context) error {
 }
 
 func (r *credentialRepository) toEntity(doc *credentialDocument) *entity.Credential {
-	return &entity.Credential{
+	cred := &entity.Credential{
 		ID:                doc.ID.Hex(),
 		UserID:            doc.UserID,
 		VaultID:           doc.VaultID,
@@ -84,8 +113,28 @@ func (r *credentialRepository) toEntity(doc *credentialDocument) *entity.Credent
 		AutoLogin:         doc.AutoLogin,
 		CreatedAt:         doc.CreatedAt,
 		UpdatedAt:         doc.UpdatedAt,
+		Vault:             (*entity.Vault)(doc.Vault),
 		Tags:              doc.Tags,
 	}
+
+	if doc.Category != nil {
+		cred.Category = &entity.MasterData{
+			ID:          doc.Category.ID,
+			Module:      doc.Category.Module,
+			Type:        doc.Category.Type,
+			Name:        doc.Category.Name,
+			Description: doc.Category.Description,
+			Icon:        doc.Category.Icon,
+			Color:       doc.Category.Color,
+			SortOrder:   doc.Category.SortOrder,
+			IsActive:    doc.Category.IsActive,
+			Metadata:    map[string]interface{}(doc.Category.Metadata),
+			CreatedAt:   doc.Category.CreatedAt,
+			UpdatedAt:   doc.Category.UpdatedAt,
+		}
+	}
+
+	return cred
 }
 
 func (r *credentialRepository) GetByID(ctx context.Context, id string) (*entity.Credential, error) {

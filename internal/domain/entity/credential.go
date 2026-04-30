@@ -22,5 +22,7 @@ type Credential struct {
 	AutoLogin         bool
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
+	Vault             *Vault
+	Category          *MasterData
 	Tags              []*Tag
 }

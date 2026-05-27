@@ -17,6 +17,7 @@ import (
 	"github.com/mafzaidi/stackforge/internal/delivery/http/router"
 	"github.com/mafzaidi/stackforge/internal/domain/repository"
 	infraAuth "github.com/mafzaidi/stackforge/internal/infrastructure/auth"
+	"github.com/mafzaidi/stackforge/internal/infrastructure/client"
 	"github.com/mafzaidi/stackforge/internal/infrastructure/config"
 	"github.com/mafzaidi/stackforge/internal/infrastructure/database"
 	"github.com/mafzaidi/stackforge/internal/infrastructure/encryption"
@@ -110,6 +111,9 @@ func main() {
 	jwksClient := infraAuth.NewJWKSClient(jwksURL, time.Duration(cfg.JWKSCacheDuration)*time.Second, appLogger)
 	jwtService := infraAuth.NewJWTService(jwksClient, cfg.AppCode, "authorizer")
 
+	// Initialize Authorizer HTTP client for fetching user data
+	authorizerClient := client.NewAuthorizerClient(cfg.AuthorizerBaseURL, appLogger)
+
 	// Initialize repositories
 	// PostgreSQL = primary for all entities
 	// MongoDB = optional secondary (dual-write) for selected entities only
@@ -189,7 +193,9 @@ func main() {
 	todoListUC := todoUseCase.NewListUseCase(todoRepo)
 
 	credentialListUC := credentialUseCase.NewListUseCase(credentialRepo)
-	credentialCreateUC := credentialUseCase.NewCreateUseCase(credentialRepo, userProfilesRepo, tagRepo, encryptionSvc, appLogger)
+	credentialCreateUC := credentialUseCase.NewCreateUseCase(credentialRepo, userProfilesRepo, tagRepo, encryptionSvc, authorizerClient, appLogger)
+	credentialSearchUC := credentialUseCase.NewSearchUseCase(credentialRepo)
+	credentialViewUC := credentialUseCase.NewViewUseCase(credentialRepo, userProfilesRepo, encryptionSvc, appLogger)
 
 	userProfilesCreateUC := userProfilesUseCase.NewCreateUseCase(userProfilesRepo, appLogger)
 	userProfilesGetByUserID := userProfilesUseCase.NewGetByUserIDUseCase(userProfilesRepo, appLogger)
@@ -198,7 +204,7 @@ func main() {
 	// Initialize handlers
 	authHandler := handler.NewAuthHandler(loginUC, callbackUC, logoutUC, appLogger)
 	todoHandler := handler.NewTodoHandler(todoListUC)
-	credentialHandler := handler.NewCredentialHandler(credentialListUC, credentialCreateUC)
+	credentialHandler := handler.NewCredentialHandler(credentialListUC, credentialCreateUC, credentialSearchUC, credentialViewUC)
 	userProfilesHandler := handler.NewUserProfilesHandler(userProfilesCreateUC, userProfilesGetByUserID, userProfilesSetupMasterPasswordUC)
 
 	// Initialize master data use case and handler

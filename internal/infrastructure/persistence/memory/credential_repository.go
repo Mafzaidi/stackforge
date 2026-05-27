@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strings"
 	"sync"
 
 	"github.com/mafzaidi/stackforge/internal/domain/entity"
@@ -129,4 +130,37 @@ func (r *credentialRepository) Delete(ctx context.Context, id string) error {
 	}
 	delete(r.data, id)
 	return nil
+}
+
+func (r *credentialRepository) SearchByKeyword(ctx context.Context, keyword string, limit, offset int) ([]*entity.Credential, int64, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	lowerKeyword := strings.ToLower(keyword)
+
+	var matched []*entity.Credential
+	for _, cred := range r.data {
+		if strings.Contains(strings.ToLower(cred.Title), lowerKeyword) ||
+			strings.Contains(strings.ToLower(cred.SiteUrl), lowerKeyword) {
+			matched = append(matched, cred)
+		}
+	}
+
+	// Sort by CreatedAt descending
+	sort.Slice(matched, func(i, j int) bool {
+		return matched[i].CreatedAt.After(matched[j].CreatedAt)
+	})
+
+	totalCount := int64(len(matched))
+
+	// Apply pagination
+	end := offset + limit
+	if offset > len(matched) {
+		offset = len(matched)
+	}
+	if end > len(matched) {
+		end = len(matched)
+	}
+
+	return matched[offset:end], totalCount, nil
 }

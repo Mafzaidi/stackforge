@@ -32,3 +32,11 @@ type ListUseCase interface {
 type ListByUserUseCase interface {
 	Execute(ctx context.Context, userID string, page, limit int) (*repository.PaginatedCredentials, error)
 }
+
+type SearchUseCase interface {
+	Execute(ctx context.Context, keyword string, limit, offset int) ([]*entity.Credential, int64, error)
+}
+
+type ViewUseCase interface {
+	Execute(ctx context.Context, userID, credentialID, masterPassword string) (*DecryptedCredentialFields, *entity.Credential, error)
+}

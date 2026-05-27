@@ -4,12 +4,14 @@ import (
 	"time"
 
 	"github.com/mafzaidi/stackforge/internal/domain/entity"
+	"github.com/mafzaidi/stackforge/internal/usecase/credential"
 )
 
 // CredentialResponse is the API representation of a credential.
 // Sensitive fields (encrypted passwords, notes) are deliberately excluded.
 type CredentialResponse struct {
 	ID               string              `json:"id"`
+	CredentialID     string              `json:"credential_id"`
 	UserID           string              `json:"user_id"`
 	VaultID          string              `json:"vault_id,omitempty"`
 	CategoryID       string              `json:"category_id,omitempty"`
@@ -41,6 +43,7 @@ func FromCredential(e *entity.Credential) CredentialResponse {
 
 	return CredentialResponse{
 		ID:               e.ID,
+		CredentialID:     e.CredentialID,
 		UserID:           e.UserID,
 		VaultID:          e.VaultID,
 		CategoryID:       e.CategoryID,
@@ -64,4 +67,22 @@ func FromCredentialList(entities []*entity.Credential) []CredentialResponse {
 		result[i] = FromCredential(e)
 	}
 	return result
+}
+
+// DecryptedCredentialResponse is the API response when viewing decrypted credential fields.
+type DecryptedCredentialResponse struct {
+	ID       string `json:"id"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+	Notes    string `json:"notes,omitempty"`
+}
+
+// FromDecryptedCredential converts decrypted fields to an API response.
+func FromDecryptedCredential(d *credential.DecryptedCredentialFields) DecryptedCredentialResponse {
+	return DecryptedCredentialResponse{
+		ID:       d.ID,
+		Username: d.Username,
+		Password: d.Password,
+		Notes:    d.Notes,
+	}
 }

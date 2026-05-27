@@ -90,3 +90,12 @@ func (r *Repository) Delete(ctx context.Context, id string) error {
 	}
 	return nil
 }
+
+// SearchByKeyword searches credentials by keyword from the secondary store (MongoDB).
+// Falls back to primary (PostgreSQL) if secondary is not available.
+func (r *Repository) SearchByKeyword(ctx context.Context, keyword string, limit, offset int) ([]*entity.Credential, int64, error) {
+	if r.secondary != nil {
+		return r.secondary.SearchByKeyword(ctx, keyword, limit, offset)
+	}
+	return r.primary.SearchByKeyword(ctx, keyword, limit, offset)
+}

@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/mafzaidi/stackforge/internal/domain/entity"
+	"github.com/mafzaidi/stackforge/internal/domain/service"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
@@ -35,6 +36,7 @@ type denormalizedCredentialDocument struct {
 	Category    *categoryEmbed    `bson:"category,omitempty"`
 	Tags        []tagEmbed        `bson:"tags"`
 	UserProfile *userProfileEmbed `bson:"user_profile,omitempty"`
+	User        *userEmbed        `bson:"user,omitempty"`
 }
 
 type vaultEmbed struct {
@@ -80,6 +82,14 @@ type userProfileEmbed struct {
 	PasswordSalt       *string   `bson:"password_salt,omitempty"`
 	CreatedAt          time.Time `bson:"created_at"`
 	UpdatedAt          time.Time `bson:"updated_at"`
+}
+
+type userEmbed struct {
+	ID          string  `bson:"id"`
+	Username    string  `bson:"username"`
+	FullName    string  `bson:"full_name"`
+	PhoneNumber *string `bson:"phone_number,omitempty"`
+	Email       string  `bson:"email"`
 }
 
 // toVaultEmbed converts a Vault entity to its embedded document representation.
@@ -153,5 +163,19 @@ func toUserProfileEmbed(p *entity.UserProfiles) *userProfileEmbed {
 		PasswordSalt:       p.PasswordSalt,
 		CreatedAt:          p.CreatedAt,
 		UpdatedAt:          p.UpdatedAt,
+	}
+}
+
+// toUserEmbed converts an AuthorizerUser to its embedded document representation.
+func toUserEmbed(u *service.AuthorizerUser) *userEmbed {
+	if u == nil {
+		return nil
+	}
+	return &userEmbed{
+		ID:          u.ID,
+		Username:    u.Username,
+		FullName:    u.FullName,
+		PhoneNumber: u.PhoneNumber,
+		Email:       u.Email,
 	}
 }

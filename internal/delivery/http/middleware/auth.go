@@ -57,8 +57,9 @@ func AuthMiddleware(jwtService JWTValidator, log service.Logger) gin.HandlerFunc
 			return
 		}
 
-		// Store claims in gin.Context
+		// Store claims and raw token in gin.Context
 		SetClaims(c, claims)
+		SetToken(c, token)
 
 		log.Info("Authentication successful", service.Fields{
 			"request_id": requestID,

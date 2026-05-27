@@ -42,7 +42,7 @@ type masterDataDocument struct {
 // credentialDocument represents the MongoDB document structure for a credential.
 type credentialDocument struct {
 	ID                primitive.ObjectID  `bson:"_id,omitempty"`
-	CredemtialID      string              `bson:"credential_id,omitempty"`
+	CredentialID      string              `bson:"credential_id,omitempty"`
 	UserID            string              `bson:"user_id"`
 	VaultID           string              `bson:"vault_id"`
 	CategoryID        string              `bson:"category_id"`
@@ -96,6 +96,7 @@ func (r *credentialRepository) EnsureIndexes(ctx context.Context) error {
 func (r *credentialRepository) toEntity(doc *credentialDocument) *entity.Credential {
 	cred := &entity.Credential{
 		ID:                doc.ID.Hex(),
+		CredentialID:      doc.CredentialID,
 		UserID:            doc.UserID,
 		VaultID:           doc.VaultID,
 		CategoryID:        doc.CategoryID,
@@ -274,4 +275,43 @@ func (r *credentialRepository) Delete(ctx context.Context, id string) error {
 
 	_, err = r.collection.DeleteOne(ctx, bson.M{"_id": objectID})
 	return err
+}
+
+func (r *credentialRepository) SearchByKeyword(ctx context.Context, keyword string, limit, offset int) ([]*entity.Credential, int64, error) {
+	filter := bson.M{
+		"$or": bson.A{
+			bson.M{"title": bson.M{"$regex": keyword, "$options": "i"}},
+			bson.M{"site_url": bson.M{"$regex": keyword, "$options": "i"}},
+		},
+	}
+
+	totalCount, err := r.collection.CountDocuments(ctx, filter)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	opts := options.Find().
+		SetSort(bson.D{{Key: "created_at", Value: -1}}).
+		SetSkip(int64(offset)).
+		SetLimit(int64(limit))
+
+	cursor, err := r.collection.Find(ctx, filter, opts)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer cursor.Close(ctx)
+
+	var credentials []*entity.Credential
+	for cursor.Next(ctx) {
+		var doc credentialDocument
+		if err := cursor.Decode(&doc); err != nil {
+			return nil, 0, err
+		}
+		credentials = append(credentials, r.toEntity(&doc))
+	}
+	if err := cursor.Err(); err != nil {
+		return nil, 0, err
+	}
+
+	return credentials, totalCount, nil
 }

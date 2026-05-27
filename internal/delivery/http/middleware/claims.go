@@ -10,9 +10,30 @@ import (
 // ClaimsContextKey is the key used to store claims in gin.Context
 const ClaimsContextKey = "auth_claims"
 
+// TokenContextKey is the key used to store the raw JWT token in gin.Context
+const TokenContextKey = "auth_token"
+
 // SetClaims stores claims in gin.Context
 func SetClaims(c *gin.Context, claims *entity.Claims) {
 	c.Set(ClaimsContextKey, claims)
+}
+
+// SetToken stores the raw JWT token in gin.Context
+func SetToken(c *gin.Context, token string) {
+	c.Set(TokenContextKey, token)
+}
+
+// GetToken retrieves the raw JWT token from gin.Context
+func GetToken(c *gin.Context) string {
+	value, exists := c.Get(TokenContextKey)
+	if !exists {
+		return ""
+	}
+	token, ok := value.(string)
+	if !ok {
+		return ""
+	}
+	return token
 }
 
 // GetClaims retrieves claims from gin.Context

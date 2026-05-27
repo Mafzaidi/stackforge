@@ -41,4 +41,8 @@ type CredentialRepository interface {
 
 	// Delete removes a credential by its ID.
 	Delete(ctx context.Context, id string) error
+
+	// SearchByKeyword searches credentials by keyword across title and site_url fields.
+	// Results are paginated and sorted by CreatedAt descending.
+	SearchByKeyword(ctx context.Context, keyword string, limit, offset int) ([]*entity.Credential, int64, error)
 }

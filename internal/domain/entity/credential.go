@@ -5,6 +5,7 @@ import "time"
 // Credential represents a credential item in the domain.
 type Credential struct {
 	ID                string
+	CredentialID      string
 	UserID            string
 	VaultID           string
 	CategoryID        string

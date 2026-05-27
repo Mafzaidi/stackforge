@@ -10,6 +10,7 @@ import (
 	"github.com/mafzaidi/stackforge/internal/domain/entity"
 	"github.com/mafzaidi/stackforge/internal/domain/repository"
 	"github.com/mafzaidi/stackforge/internal/domain/service"
+	"github.com/mafzaidi/stackforge/internal/pkg/ctxutil"
 )
 
 const (
@@ -25,11 +26,12 @@ type Encryptor interface {
 }
 
 type createUseCase struct {
-	repo            repository.CredentialRepository
-	userProfileRepo repository.UserProfilesRepository
-	tagRepo         repository.TagRepository
-	encryptor       Encryptor
-	logger          service.Logger
+	repo             repository.CredentialRepository
+	userProfileRepo  repository.UserProfilesRepository
+	tagRepo          repository.TagRepository
+	encryptor        Encryptor
+	authorizerClient service.AuthorizerClient
+	logger           service.Logger
 }
 
 func NewCreateUseCase(
@@ -37,14 +39,16 @@ func NewCreateUseCase(
 	userProfileRepo repository.UserProfilesRepository,
 	tagRepo repository.TagRepository,
 	encryptor Encryptor,
+	authorizerClient service.AuthorizerClient,
 	logger service.Logger,
 ) CreateUseCase {
 	return &createUseCase{
-		repo:            repo,
-		userProfileRepo: userProfileRepo,
-		tagRepo:         tagRepo,
-		encryptor:       encryptor,
-		logger:          logger,
+		repo:             repo,
+		userProfileRepo:  userProfileRepo,
+		tagRepo:          tagRepo,
+		encryptor:        encryptor,
+		authorizerClient: authorizerClient,
+		logger:           logger,
 	}
 }
 
@@ -152,6 +156,21 @@ func (uc *createUseCase) Execute(
 				"error":         err.Error(),
 			})
 			return nil, errors.New("failed to add tags to credential")
+		}
+	}
+
+	// Fetch user data from Authorizer and store in context for the repository layer
+	token := ctxutil.TokenFromContext(ctx)
+	if token != "" {
+		user, err := uc.authorizerClient.GetUserByID(ctx, userID, token)
+		if err != nil {
+			uc.logger.Warn("failed to fetch user from authorizer, credential will be saved without user embed", service.Fields{
+				"user_id": userID,
+				"action":  "CREATE_CREDENTIAL",
+				"error":   err.Error(),
+			})
+		} else {
+			ctx = ctxutil.WithUser(ctx, user)
 		}
 	}
 

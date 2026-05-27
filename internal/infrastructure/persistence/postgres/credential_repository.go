@@ -108,3 +108,33 @@ func (r *credentialRepository) Update(ctx context.Context, c *entity.Credential)
 func (r *credentialRepository) Delete(ctx context.Context, id string) error {
 	return r.db.WithContext(ctx).Where("id = ?", id).Delete(&model.Credential{}).Error
 }
+
+func (r *credentialRepository) SearchByKeyword(ctx context.Context, keyword string, limit, offset int) ([]*entity.Credential, int64, error) {
+	pattern := "%" + keyword + "%"
+
+	var totalCount int64
+	countResult := r.db.WithContext(ctx).
+		Model(&model.Credential{}).
+		Where("title ILIKE ? OR site_url ILIKE ?", pattern, pattern).
+		Count(&totalCount)
+	if countResult.Error != nil {
+		return nil, 0, countResult.Error
+	}
+
+	var models []model.Credential
+	result := r.db.WithContext(ctx).
+		Where("title ILIKE ? OR site_url ILIKE ?", pattern, pattern).
+		Order("created_at DESC").
+		Offset(offset).
+		Limit(limit).
+		Find(&models)
+	if result.Error != nil {
+		return nil, 0, result.Error
+	}
+
+	credentials := make([]*entity.Credential, len(models))
+	for i, m := range models {
+		credentials[i] = m.ToEntity()
+	}
+	return credentials, totalCount, nil
+}

@@ -6,6 +6,7 @@ import (
 	"github.com/mafzaidi/stackforge/internal/domain/entity"
 	"github.com/mafzaidi/stackforge/internal/domain/repository"
 	"github.com/mafzaidi/stackforge/internal/domain/service"
+	"github.com/mafzaidi/stackforge/internal/pkg/ctxutil"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 )
@@ -14,7 +15,7 @@ const credentialCollection = "credentials"
 
 // DenormalizedWriter orchestrates fetching related data and writing
 // denormalized credential documents to MongoDB. It embeds vault, category,
-// tags, and user profile data alongside credential fields for efficient reads.
+// tags, user profile, and user data alongside credential fields for efficient reads.
 type DenormalizedWriter struct {
 	mongoColl       *mongo.Collection
 	vaultRepo       repository.VaultRepository
@@ -25,8 +26,6 @@ type DenormalizedWriter struct {
 }
 
 // NewDenormalizedWriter creates a new DenormalizedWriter with all required dependencies.
-// The tagRepo is used to fetch tags internally during denormalized document creation,
-// eliminating the need for callers to pass tags explicitly.
 func NewDenormalizedWriter(
 	mongoClient *mongo.Client,
 	dbName string,
@@ -46,14 +45,15 @@ func NewDenormalizedWriter(
 	}
 }
 
-// CreateDenormalized fetches all related data (vault, category, tags, user profile)
+// CreateDenormalized fetches internal related data (vault, category, tags, user profile)
 // and writes a denormalized credential document to MongoDB.
-// Tags are fetched internally from TagRepository using the credential's UserID and ID.
+// User data is read from context (set by the usecase layer).
 func (w *DenormalizedWriter) CreateDenormalized(ctx context.Context, cred *entity.Credential) error {
 	vault, category, userProfile := w.fetchRelatedData(ctx, cred)
 	tags := w.fetchTags(ctx, cred.UserID, cred.ID)
+	user := ctxutil.UserFromContext(ctx)
 
-	doc := w.assembleDocument(cred, vault, category, tags, userProfile)
+	doc := w.assembleDocument(cred, vault, category, tags, userProfile, user)
 
 	_, err := w.mongoColl.InsertOne(ctx, doc)
 	if err != nil {
@@ -67,13 +67,15 @@ func (w *DenormalizedWriter) CreateDenormalized(ctx context.Context, cred *entit
 	return nil
 }
 
-// UpdateDenormalized fetches the latest related data (including tags) and replaces
+// UpdateDenormalized fetches internal related data and replaces
 // the denormalized document in MongoDB for the given credential.
+// User data is read from context (set by the usecase layer).
 func (w *DenormalizedWriter) UpdateDenormalized(ctx context.Context, cred *entity.Credential) error {
 	vault, category, userProfile := w.fetchRelatedData(ctx, cred)
 	tags := w.fetchTags(ctx, cred.UserID, cred.ID)
+	user := ctxutil.UserFromContext(ctx)
 
-	doc := w.assembleDocument(cred, vault, category, tags, userProfile)
+	doc := w.assembleDocument(cred, vault, category, tags, userProfile, user)
 
 	filter := bson.M{"credential_id": cred.ID}
 	_, err := w.mongoColl.ReplaceOne(ctx, filter, doc)
@@ -103,7 +105,6 @@ func (w *DenormalizedWriter) Delete(ctx context.Context, credentialID string) er
 }
 
 // fetchRelatedData retrieves vault, category, and user profile for a credential.
-// If any lookup fails or returns nil, the corresponding embed will be nil in the document.
 func (w *DenormalizedWriter) fetchRelatedData(
 	ctx context.Context,
 	cred *entity.Credential,
@@ -112,7 +113,6 @@ func (w *DenormalizedWriter) fetchRelatedData(
 	var category *entity.MasterData
 	var userProfile *entity.UserProfiles
 
-	// Fetch vault
 	v, err := w.vaultRepo.GetByID(ctx, cred.VaultID)
 	if err != nil {
 		w.logger.Warn("denormalized-writer: failed to fetch vault", service.Fields{
@@ -123,7 +123,6 @@ func (w *DenormalizedWriter) fetchRelatedData(
 		vault = v
 	}
 
-	// Fetch category
 	c, err := w.masterDataRepo.GetByID(ctx, cred.CategoryID)
 	if err != nil {
 		w.logger.Warn("denormalized-writer: failed to fetch category", service.Fields{
@@ -134,7 +133,6 @@ func (w *DenormalizedWriter) fetchRelatedData(
 		category = c
 	}
 
-	// Fetch user profile
 	p, err := w.userProfileRepo.GetByUserID(ctx, cred.UserID)
 	if err != nil {
 		w.logger.Warn("denormalized-writer: failed to fetch user profile", service.Fields{
@@ -149,8 +147,6 @@ func (w *DenormalizedWriter) fetchRelatedData(
 }
 
 // fetchTags retrieves tags associated with a credential from TagRepository.
-// It filters by UserID, Module="credential", and RefID=credentialID.
-// Returns an empty slice if no tags are found or if the fetch fails.
 func (w *DenormalizedWriter) fetchTags(ctx context.Context, userID, credentialID string) []*entity.Tag {
 	module := "credential"
 	filter := repository.TagFilter{
@@ -172,13 +168,14 @@ func (w *DenormalizedWriter) fetchTags(ctx context.Context, userID, credentialID
 }
 
 // assembleDocument builds the denormalized MongoDB document from a credential
-// and its related data (vault, category, tags, user profile).
+// and its related data (vault, category, tags, user profile, user).
 func (w *DenormalizedWriter) assembleDocument(
 	cred *entity.Credential,
 	vault *entity.Vault,
 	category *entity.MasterData,
 	tags []*entity.Tag,
 	userProfile *entity.UserProfiles,
+	user *service.AuthorizerUser,
 ) *denormalizedCredentialDocument {
 	return &denormalizedCredentialDocument{
 		CredentialID:      cred.ID,
@@ -203,5 +200,6 @@ func (w *DenormalizedWriter) assembleDocument(
 		Category:          toCategoryEmbed(category),
 		Tags:              toTagEmbeds(tags),
 		UserProfile:       toUserProfileEmbed(userProfile),
+		User:              toUserEmbed(user),
 	}
 }

@@ -48,6 +48,7 @@ func RegisterAPIRoutes(
 		// Credential endpoints
 		api.GET("/credentials", credentialHandler.List)
 		api.POST("/credentials", credentialHandler.Create)
+		api.POST("/credentials/:id/view", credentialHandler.ViewDecrypted)
 
 		// User profile endpoints
 		api.POST("/user-profiles", UserProfilesHandler.Create)

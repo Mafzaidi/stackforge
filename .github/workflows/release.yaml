@@ -1,0 +1,76 @@
+name: Build & Push Docker Image
+
+on:
+  push:
+    branches:
+      - dev
+    tags:
+      - '*.*.*'
+
+env:
+  REGISTRY: docker.io
+  IMAGE_NAME: mafzaidi93/stackforge
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Build Go binary
+        run: |
+          mkdir -p bin
+          go build -ldflags "-s -w" -o bin/stackforge ./cmd/api
+
+      - name: Extract Git Info
+        id: gitvars
+        run: |
+          COMMIT=$(git rev-parse --short HEAD)
+          echo "commit=$COMMIT" >> $GITHUB_OUTPUT
+
+          # cek apakah ini event tag
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/}
+            echo "is_tag=true" >> $GITHUB_OUTPUT
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+          else
+            BASE_TAG=$(git describe --tags --abbrev=0 || echo "0.0.0")
+            VERSION="${BASE_TAG}-dev.${COMMIT}"
+            echo "is_tag=false" >> $GITHUB_OUTPUT
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Log in to DockerHub
+        run: echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login ${{ env.REGISTRY }} -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            --build-arg VERSION=${{ steps.gitvars.outputs.version }} \
+            --build-arg COMMIT=${{ steps.gitvars.outputs.commit }} \
+            -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.gitvars.outputs.version }} .
+
+      - name: Tag latest (only for production)
+        if: steps.gitvars.outputs.is_tag == 'true'
+        run: |
+          docker tag \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.gitvars.outputs.version }} \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+
+      - name: Push Docker image
+        run: |
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.gitvars.outputs.version }}
+
+      - name: Push latest (prod only)
+        if: steps.gitvars.outputs.is_tag == 'true'
+        run: |
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
